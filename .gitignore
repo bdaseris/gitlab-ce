@@ -1,3 +1,4 @@
-data
+data/
+root_password.txt
 .vscode
 .env

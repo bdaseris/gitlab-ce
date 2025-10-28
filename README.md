@@ -69,9 +69,9 @@ volumes:
 Il est recommandé de **ne pas versionner** le mot de passe root. Vous pouvez créer un secret Docker aléatoire ou défini :
 
 ```bash
-docker secret create gitlab_root_password - <<EOF
-$(openssl rand -base64 24)
-EOF
+cd gitlab-ce
+docker secret rm gitlab_root_password 2>/dev/null
+openssl rand -base64 24 | tee ./docker/gitlab/root_password.txt | docker secret create gitlab_root_password -
 ```
 
 > Ce secret sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`.
@@ -83,7 +83,6 @@ EOF
 Avec les volumes et le secret prêts, déployer la stack :
 
 ```bash
-cd gitlab-ce
 docker stack deploy -c docker-compose.yml gitlab
 ```
 
