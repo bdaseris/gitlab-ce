@@ -13,11 +13,16 @@ services:
       - ${GITLAB_HOME}/config:/etc/gitlab
     environment:
       GITLAB_OMNIBUS_CONFIG: "from_file('/omnibus_config.rb')"
+      SMTP_ADDRESS: ${SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER_NAME: ${SMTP_USER_NAME}
+      SMTP_DOMAIN: ${SMTP_DOMAIN}
     configs:
       - source: gitlab
         target: /omnibus_config.rb
     secrets:
       - gitlab_root_password
+      - gitlab_smtp_password
     networks:
       - gitlab-network
     deploy:
@@ -53,6 +58,8 @@ configs:
 
 secrets:
   gitlab_root_password:
+    external: true
+  gitlab_smtp_password:
     external: true
 
 networks:

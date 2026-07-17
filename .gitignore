@@ -1,4 +1,5 @@
 data/
 root_password.txt
+smtp_password.txt
 .vscode
 .env
