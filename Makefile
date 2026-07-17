@@ -43,15 +43,17 @@ create_secrets:
 	@if docker secret inspect gitlab_root_password >/dev/null 2>&1; then \
 		echo "Secret gitlab_root_password déjà présent, conservé."; \
 	else \
-		echo "Création du secret gitlab_root_password..."; \
-		openssl rand -base64 24 | docker secret create gitlab_root_password -; \
+		echo "Création du secret gitlab_root_password (aléatoire)..."; \
+		openssl rand -base64 24 | docker secret create gitlab_root_password - >/dev/null; \
+		echo "Secret gitlab_root_password créé."; \
 	fi
 	@if docker secret inspect gitlab_smtp_password >/dev/null 2>&1; then \
 		echo "Secret gitlab_smtp_password déjà présent, conservé."; \
 	else \
 		test -f $(SMTP_PASSWORD_FILE) || { echo "Erreur : $(SMTP_PASSWORD_FILE) introuvable. Créez ce fichier avec le mot de passe SMTP."; exit 1; }; \
-		echo "Création du secret gitlab_smtp_password..."; \
-		docker secret create gitlab_smtp_password $(SMTP_PASSWORD_FILE); \
+		echo "Création du secret gitlab_smtp_password à partir de $(SMTP_PASSWORD_FILE)..."; \
+		docker secret create gitlab_smtp_password $(SMTP_PASSWORD_FILE) >/dev/null; \
+		echo "Secret gitlab_smtp_password créé (contenu du fichier, non généré)."; \
 	fi
 	@echo "Secrets prêts."
 
