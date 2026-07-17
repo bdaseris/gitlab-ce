@@ -6,14 +6,15 @@ external_url 'http://gitlab.local'
 # SSH settings
 gitlab_rails['gitlab_shell_ssh_port'] = 2222
 
-# Nginx settings
-nginx['redirect_http_to_https'] = true
+# Nginx settings (syntaxe GitLab 19.x : nginx['...'] est déprécié)
+gitlab_rails['nginx'] = {
+  'redirect_http_to_https' => true,
+  'ssl_certificate' => "/etc/gitlab/ssl/gitlab.securit.fr.crt",
+  'ssl_certificate_key' => "/etc/gitlab/ssl/gitlab.securit.fr.key"
+}
 
 # Initial root password from Docker secret
 gitlab_rails['initial_root_password'] = File.read('/run/secrets/gitlab_root_password').gsub("\n", "")
-
-nginx['ssl_certificate'] = "/etc/gitlab/ssl/gitlab.securit.fr.crt"
-nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/gitlab.securit.fr.key"
 
 ## Email settings (envoi SMTP uniquement)
 # Les valeurs non sensibles proviennent des variables d'environnement (.env),
