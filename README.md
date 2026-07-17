@@ -34,7 +34,8 @@ docker swarm init
 1. Créer les répertoires sur la VM pour les données GitLab (incluant le répertoire pour les certificats SSL) :
 
 ```bash
-sudo mkdir -p /data/gitlab/data /data/gitlab/logs /data/gitlab/config
+sudo rm -rf /data/gitlab/*
+sudo mkdir -p /data/gitlab/data /data/gitlab/logs /data/gitlab/config /data/gitlab/ssl
 sudo chown -R 1000:1000 /data/gitlab
 ```
 
@@ -45,13 +46,25 @@ sudo chown -R 1000:1000 /data/gitlab
 >
 > Ces fichiers seront montés dans le container sur `/etc/gitlab/ssl/` (voir la configuration `gitlab.rb` : `nginx['/etc/gitlab/ssl/gitlab.securit.fr.crt']` et `nginx['/etc/gitlab/ssl/gitlab.securit.fr.key']`).
 
-2. Définir la variable d'environnement :
+2. Définir les variables d'environnement dans le fichier `.env` (voir `.env.example`) :
 
 ```bash
-echo "export GITLAB_HOME=/data/gitlab" | sudo tee -a /etc/profile.d/gitlab.sh
-sudo chmod +x /etc/profile.d/gitlab.sh
-source /etc/profile.d/gitlab.sh
+GITLAB_HOME=/data/gitlab
+
+# SMTP (valeurs non sensibles — le mot de passe est géré via Docker secret)
+SMTP_ADDRESS=mta.securit.fr
+SMTP_PORT=587
+SMTP_USER_NAME=GitLab Notifier <gitlab-info@seris.fr>
+SMTP_DOMAIN=securit.fr
 ```
+
+> Le fichier `.env` n'est **pas versionné** (`.gitignore`). Le `Makefile` le charge automatiquement (`include .env` + `export`), et ces variables sont substituées dans `docker-compose.yml` puis lues par `gitlab.rb` via `ENV['...']`.
+>
+> Si vous déployez sans le Makefile, exportez d'abord les variables dans le shell :
+>
+> ```bash
+> set -a; source .env; set +a
+> ```
 
 3. Vérifier que les volumes sont correctement mappés dans le `docker-compose.yml` :
 
@@ -64,17 +77,24 @@ volumes:
 
 ---
 
-## Étape 3 : Créer le secret pour le mot de passe root
+## Étape 3 : Créer les secrets (mot de passe root + mot de passe SMTP)
 
-Il est recommandé de **ne pas versionner** le mot de passe root. Vous pouvez créer un secret Docker aléatoire ou défini :
+Il est recommandé de **ne pas versionner** les mots de passe. Créez les secrets Docker :
 
 ```bash
 cd gitlab-ce
-docker secret rm gitlab_root_password 2>/dev/null
+docker secret rm gitlab_root_password
 openssl rand -base64 24 | tee ./docker/gitlab/root_password.txt | docker secret create gitlab_root_password -
+
+# Mot de passe SMTP (fichier non versionné, cf. .gitignore)
+echo "<mot-de-passe-smtp>" > ./docker/gitlab/smtp_password.txt
+docker secret rm gitlab_smtp_password 2>/dev/null
+docker secret create gitlab_smtp_password ./docker/gitlab/smtp_password.txt
 ```
 
-> Ce secret sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`.
+> Le secret `gitlab_root_password` sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`. Le secret `gitlab_smtp_password` est lu par `gitlab.rb` depuis `/run/secrets/gitlab_smtp_password`.
+>
+> Alternativement, `make create_secrets` crée les deux secrets automatiquement (le mot de passe SMTP doit exister dans `docker/gitlab/smtp_password.txt`).
 
 ---
 
@@ -132,7 +152,8 @@ docker stack rm gitlab
 
 ```bash
 docker config rm gitlab
-docker secret rm gitlab_root_password
+docker secret rm gitlab_root_password 2>/dev/null
+docker secret rm gitlab_smtp_password 2>/dev/null
 ```
 
 3. Supprimer les containers résiduels (si nécessaire) :
