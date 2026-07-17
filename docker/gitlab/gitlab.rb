@@ -1,6 +1,7 @@
 ## Settings for GitLab instance
 
-external_url 'http://gitlab.local'
+external_url 'http://172.16.100.121'
+# external_url 'http://gitlab.local'
 # external_url 'https://gitlab.securit.fr'
 
 # SSH settings
@@ -12,6 +13,12 @@ gitlab_rails['nginx'] = {
   'ssl_certificate' => "/etc/gitlab/ssl/gitlab.securit.fr.crt",
   'ssl_certificate_key' => "/etc/gitlab/ssl/gitlab.securit.fr.key"
 }
+
+## GitLab Pages (publication des artefacts, ex. mises à jour electron-updater)
+# namespace_in_path évite le besoin d'un DNS wildcard : les sites sont servis
+# sous http://pages.gitlab.local/<namespace>/<projet>
+pages_external_url 'http://pages.gitlab.local'
+gitlab_pages['namespace_in_path'] = true
 
 # Initial root password from Docker secret
 gitlab_rails['initial_root_password'] = File.read('/run/secrets/gitlab_root_password').gsub("\n", "")
