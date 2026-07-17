@@ -55,6 +55,9 @@ services:
 configs:
   gitlab:
     file: ./docker/gitlab/gitlab.rb
+    # Nom versionné par hash : les configs Swarm étant immuables, chaque
+    # modification de gitlab.rb doit créer une config au nom différent
+    name: gitlab_conf_${GITLAB_CONFIG_HASH:-manual}
 
 secrets:
   gitlab_root_password:

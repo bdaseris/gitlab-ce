@@ -5,6 +5,10 @@
 include .env
 export
 
+# make lit les guillemets du .env littéralement (contrairement à bash) :
+# on les retire pour que la valeur exportée soit propre
+SMTP_USER_NAME := $(subst ",,$(SMTP_USER_NAME))
+
 # Vérifie que la variable GITLAB_HOME est définie
 ifeq ($(origin GITLAB_HOME),undefined)
 $(error La variable GITLAB_HOME n'est pas définie. Ajoutez-la au fichier .env, par exemple : GITLAB_HOME=/data/gitlab)
@@ -14,6 +18,11 @@ endif
 COMPOSE_FILE=docker-compose.yml
 STACK_NAME=gitlab
 SMTP_PASSWORD_FILE=docker/gitlab/smtp_password.txt
+
+# Les configs Swarm sont immuables : le nom de la config inclut le hash de
+# gitlab.rb pour que chaque modification crée une nouvelle config au lieu
+# d'essayer de mettre à jour l'ancienne (interdit par Swarm)
+GITLAB_CONFIG_HASH := $(shell md5sum docker/gitlab/gitlab.rb | cut -c1-8)
 
 .PHONY: all init_volumes create_secrets deploy reinit status
 
@@ -28,21 +37,30 @@ init_volumes:
 	sudo chown -R 1000:1000 $(GITLAB_HOME)
 	@echo "Répertoires créés et permissions définies."
 
-## Étape 2 : Créer les secrets Docker (mot de passe root + mot de passe SMTP)
+## Étape 2 : Créer les secrets Docker s'ils n'existent pas encore
+## (idempotent : ne touche pas aux secrets déjà présents/utilisés)
 create_secrets:
-	@echo "Création du secret Docker pour le mot de passe root..."
-	@docker secret rm gitlab_root_password 2>/dev/null || true
-	@openssl rand -base64 24 | docker secret create gitlab_root_password -
-	@echo "Création du secret Docker pour le mot de passe SMTP..."
-	@test -f $(SMTP_PASSWORD_FILE) || { echo "Erreur : $(SMTP_PASSWORD_FILE) introuvable. Créez ce fichier avec le mot de passe SMTP."; exit 1; }
-	@docker secret rm gitlab_smtp_password 2>/dev/null || true
-	@docker secret create gitlab_smtp_password $(SMTP_PASSWORD_FILE)
-	@echo "Secrets créés."
+	@if docker secret inspect gitlab_root_password >/dev/null 2>&1; then \
+		echo "Secret gitlab_root_password déjà présent, conservé."; \
+	else \
+		echo "Création du secret gitlab_root_password..."; \
+		openssl rand -base64 24 | docker secret create gitlab_root_password -; \
+	fi
+	@if docker secret inspect gitlab_smtp_password >/dev/null 2>&1; then \
+		echo "Secret gitlab_smtp_password déjà présent, conservé."; \
+	else \
+		test -f $(SMTP_PASSWORD_FILE) || { echo "Erreur : $(SMTP_PASSWORD_FILE) introuvable. Créez ce fichier avec le mot de passe SMTP."; exit 1; }; \
+		echo "Création du secret gitlab_smtp_password..."; \
+		docker secret create gitlab_smtp_password $(SMTP_PASSWORD_FILE); \
+	fi
+	@echo "Secrets prêts."
 
 ## Étape 3 : Déployer la stack GitLab
 deploy:
-	@echo "Déploiement de la stack GitLab..."
+	@echo "Déploiement de la stack GitLab (config gitlab_conf_$(GITLAB_CONFIG_HASH))..."
 	docker stack deploy -c $(COMPOSE_FILE) $(STACK_NAME)
+	@echo "Nettoyage des anciennes configs (ignorées si encore utilisées)..."
+	@docker config ls --format '{{.Name}}' | grep '^gitlab_conf_' | grep -v '$(GITLAB_CONFIG_HASH)' | xargs -r -n1 docker config rm 2>/dev/null || true
 	@echo "Stack déployée."
 
 ## Réinitialiser l'instance GitLab (supprimer et redéployer)
