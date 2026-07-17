@@ -4,8 +4,8 @@ services:
     # Étapes intermédiaires obligatoires ; passer à la version suivante
     # uniquement lorsque l'instance a démarré et que les migrations
     # (y compris les background migrations) sont terminées
-    image: gitlab/gitlab-ce:18.8.11-ce.0
-    # image: gitlab/gitlab-ce:18.11.7-ce.0
+    # image: gitlab/gitlab-ce:18.8.11-ce.0
+    image: gitlab/gitlab-ce:18.11.7-ce.0
     # image: gitlab/gitlab-ce:19.2.0-ce.0
     hostname: 'gitlab.local'
     # hostname: 'gitlab.securit.fr'

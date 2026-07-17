@@ -15,10 +15,13 @@ gitlab_rails['initial_root_password'] = File.read('/run/secrets/gitlab_root_pass
 nginx['ssl_certificate'] = "/etc/gitlab/ssl/gitlab.securit.fr.crt"
 nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/gitlab.securit.fr.key"
 
-## Email settings
+## Email settings (envoi SMTP uniquement)
 # Les valeurs non sensibles proviennent des variables d'environnement (.env),
 # le mot de passe provient du Docker secret gitlab_smtp_password.
-gitlab_rails['incoming_email_enabled'] = true
+# incoming_email reste désactivé : il nécessite une boîte IMAP dédiée,
+# sinon le service mail_room crash en boucle.
+gitlab_rails['incoming_email_enabled'] = false
+gitlab_rails['smtp_enable'] = true
 gitlab_rails['smtp_address'] = ENV['SMTP_ADDRESS']
 gitlab_rails['smtp_port'] = ENV['SMTP_PORT'].to_i
 gitlab_rails['smtp_user_name'] = ENV['SMTP_USER_NAME']
