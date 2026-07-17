@@ -60,9 +60,9 @@ create_secrets:
 ## Étape 3 : Déployer la stack GitLab
 deploy:
 	@echo "Déploiement de la stack GitLab (config gitlab_conf_$(GITLAB_CONFIG_HASH))..."
-	docker stack deploy -c $(COMPOSE_FILE) $(STACK_NAME)
+	docker stack deploy --detach=true -c $(COMPOSE_FILE) $(STACK_NAME)
 	@echo "Nettoyage des anciennes configs (ignorées si encore utilisées)..."
-	@docker config ls --format '{{.Name}}' | grep '^gitlab_conf_' | grep -v '$(GITLAB_CONFIG_HASH)' | xargs -r -n1 docker config rm 2>/dev/null || true
+	@docker config ls --format '{{.Name}}' | grep '^gitlab_conf_' | grep -v '$(GITLAB_CONFIG_HASH)' | xargs -r -n1 docker config rm >/dev/null 2>&1 || true
 	@echo "Stack déployée."
 
 ## Réinitialiser l'instance GitLab (supprimer et redéployer)
