@@ -54,17 +54,20 @@ GITLAB_HOME=/data/gitlab
 # SMTP (valeurs non sensibles — le mot de passe est géré via Docker secret)
 SMTP_ADDRESS=mta.securit.fr
 SMTP_PORT=587
-SMTP_USER_NAME=GitLab Notifier <gitlab-info@seris.fr>
+SMTP_USER_NAME="GitLab Notifier <gitlab-info@seris.fr>"
 SMTP_DOMAIN=securit.fr
 ```
 
 > Le fichier `.env` n'est **pas versionné** (`.gitignore`). Le `Makefile` le charge automatiquement (`include .env` + `export`), et ces variables sont substituées dans `docker-compose.yml` puis lues par `gitlab.rb` via `ENV['...']`.
 >
-> Si vous déployez sans le Makefile, exportez d'abord les variables dans le shell :
+> Si vous déployez sans le Makefile, exportez d'abord les variables dans le shell (y compris le hash de la config, cf. plus bas) :
 >
 > ```bash
 > set -a; source .env; set +a
+> export GITLAB_CONFIG_HASH=$(md5sum docker/gitlab/gitlab.rb | cut -c1-8)
 > ```
+>
+> **Note** : les configs Docker Swarm sont **immuables**. Le nom de la config (`gitlab_conf_<hash>`) inclut le hash de `gitlab.rb` : toute modification du fichier crée une nouvelle config au lieu d'échouer avec l'erreur `only updates to Labels are allowed`. Le Makefile calcule ce hash automatiquement et supprime les anciennes configs après chaque déploiement.
 
 3. Vérifier que les volumes sont correctement mappés dans le `docker-compose.yml` :
 
@@ -94,7 +97,7 @@ docker secret create gitlab_smtp_password ./docker/gitlab/smtp_password.txt
 
 > Le secret `gitlab_root_password` sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`. Le secret `gitlab_smtp_password` est lu par `gitlab.rb` depuis `/run/secrets/gitlab_smtp_password`.
 >
-> Alternativement, `make create_secrets` crée les deux secrets automatiquement (le mot de passe SMTP doit exister dans `docker/gitlab/smtp_password.txt`).
+> Alternativement, `make create_secrets` crée les deux secrets automatiquement (le mot de passe SMTP doit exister dans `docker/gitlab/smtp_password.txt`). Cette cible est **idempotente** : les secrets déjà existants sont conservés, ce qui permet de l'exécuter sans risque sur une instance en production.
 
 ---
 
@@ -151,7 +154,7 @@ docker stack rm gitlab
 2. Supprimer les services et secrets existants :
 
 ```bash
-docker config rm gitlab
+docker config ls --format '{{.Name}}' | grep '^gitlab_conf_' | xargs -r docker config rm
 docker secret rm gitlab_root_password 2>/dev/null
 docker secret rm gitlab_smtp_password 2>/dev/null
 ```
