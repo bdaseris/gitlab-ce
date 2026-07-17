@@ -1,6 +1,10 @@
 services:
   gitlab:
-    image: gitlab/gitlab-ce:19.2.0-ce.0
+    # Upgrade path GitLab : 18.5.1 -> 18.11.x (dernier) -> 19.2.0
+    # Étape intermédiaire obligatoire ; passer à 19.2.0-ce.0 une fois que
+    # l'instance 18.11.7 est démarrée et que les migrations sont terminées
+    image: gitlab/gitlab-ce:18.11.7-ce.0
+    # image: gitlab/gitlab-ce:19.2.0-ce.0
     hostname: 'gitlab.local'
     # hostname: 'gitlab.securit.fr'
     ports:
