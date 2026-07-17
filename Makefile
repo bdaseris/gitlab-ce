@@ -18,6 +18,7 @@ endif
 COMPOSE_FILE=docker-compose.yml
 STACK_NAME=gitlab
 SMTP_PASSWORD_FILE=docker/gitlab/smtp_password.txt
+RUNNER_TOKEN_FILE=docker/gitlab/runner_token.txt
 
 # Les configs Swarm sont immuables : le nom de la config inclut le hash de
 # gitlab.rb pour que chaque modification crée une nouvelle config au lieu
@@ -54,6 +55,14 @@ create_secrets:
 		echo "Création du secret gitlab_smtp_password à partir de $(SMTP_PASSWORD_FILE)..."; \
 		docker secret create gitlab_smtp_password $(SMTP_PASSWORD_FILE) >/dev/null; \
 		echo "Secret gitlab_smtp_password créé (contenu du fichier, non généré)."; \
+	fi
+	@if docker secret inspect gitlab_runner_token >/dev/null 2>&1; then \
+		echo "Secret gitlab_runner_token déjà présent, conservé."; \
+	else \
+		test -f $(RUNNER_TOKEN_FILE) || { echo "Erreur : $(RUNNER_TOKEN_FILE) introuvable. Créez un runner d'instance dans l'UI admin (Admin -> CI/CD -> Runners) et collez le token glrt-... dans ce fichier."; exit 1; }; \
+		echo "Création du secret gitlab_runner_token à partir de $(RUNNER_TOKEN_FILE)..."; \
+		docker secret create gitlab_runner_token $(RUNNER_TOKEN_FILE) >/dev/null; \
+		echo "Secret gitlab_runner_token créé."; \
 	fi
 	@echo "Secrets prêts."
 

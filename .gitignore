@@ -1,5 +1,6 @@
 data/
 root_password.txt
 smtp_password.txt
+runner_token.txt
 .vscode
 .env

@@ -93,7 +93,15 @@ openssl rand -base64 24 | tee ./docker/gitlab/root_password.txt | docker secret 
 echo "<mot-de-passe-smtp>" > ./docker/gitlab/smtp_password.txt
 docker secret rm gitlab_smtp_password 2>/dev/null
 docker secret create gitlab_smtp_password ./docker/gitlab/smtp_password.txt
+
+# Token d'enregistrement des runners CI (fichier non versionné)
+# À créer dans l'UI : Espace d'administration -> CI/CD -> Runners -> "Créer un runner d'instance"
+echo "glrt-..." > ./docker/gitlab/runner_token.txt
+docker secret rm gitlab_runner_token 2>/dev/null
+docker secret create gitlab_runner_token ./docker/gitlab/runner_token.txt
 ```
+
+> **Runners CI** : les replicas `gitlab-runner` s'enregistrent automatiquement au démarrage avec ce token (executor `docker`). La variable `GITLAB_HOST_IP` du `.env` doit contenir l'IP de la VM pour que les containers de job résolvent `gitlab.local`.
 
 > Le secret `gitlab_root_password` sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`. Le secret `gitlab_smtp_password` est lu par `gitlab.rb` depuis `/run/secrets/gitlab_smtp_password`.
 >

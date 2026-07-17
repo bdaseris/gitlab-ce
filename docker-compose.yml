@@ -24,7 +24,10 @@ services:
       - gitlab_root_password
       - gitlab_smtp_password
     networks:
-      - gitlab-network
+      gitlab-network:
+        # permet aux runners de joindre l'instance via son external_url
+        aliases:
+          - gitlab.local
     deploy:
       replicas: 1
       restart_policy:
@@ -38,7 +41,6 @@ services:
 
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
-      # test: ["CMD-SHELL", "curl -k https://localhost/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -46,9 +48,29 @@ services:
 
   gitlab-runner:
     image: gitlab/gitlab-runner:alpine
+    # S'enregistre automatiquement au démarrage auprès de l'instance GitLab
+    # avec le token du secret gitlab_runner_token (créé via l'UI admin).
+    # Les jobs tournent avec l'executor docker (socket Docker de l'hôte) ;
+    # gitlab.local est résolu dans les containers de job via extra-hosts.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if ! grep -q '\[\[runners\]\]' /etc/gitlab-runner/config.toml 2>/dev/null; then
+          gitlab-runner register --non-interactive \
+            --url "http://gitlab.local" \
+            --token "$$(cat /run/secrets/gitlab_runner_token)" \
+            --executor docker \
+            --docker-image alpine:latest \
+            --docker-extra-hosts "gitlab.local:${GITLAB_HOST_IP}"
+        fi
+        exec /usr/bin/dumb-init /entrypoint run
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    secrets:
+      - gitlab_runner_token
     deploy:
       mode: replicated
-      replicas: 4
+      replicas: 2
     networks:
       - gitlab-network
 
@@ -63,6 +85,8 @@ secrets:
   gitlab_root_password:
     external: true
   gitlab_smtp_password:
+    external: true
+  gitlab_runner_token:
     external: true
 
 networks:
