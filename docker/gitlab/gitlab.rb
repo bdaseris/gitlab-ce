@@ -11,7 +11,9 @@ gitlab_rails['gitlab_shell_ssh_port'] = 2222
 gitlab_rails['nginx'] = {
   'redirect_http_to_https' => true,
   'ssl_certificate' => "/etc/gitlab/ssl/gitlab.securit.fr.crt",
-  'ssl_certificate_key' => "/etc/gitlab/ssl/gitlab.securit.fr.key"
+  'ssl_certificate_key' => "/etc/gitlab/ssl/gitlab.securit.fr.key",
+  # Uploads volumineux (artefacts CI type installateur Electron ~100-200 Mo)
+  'client_max_body_size' => '1g'
 }
 
 ## GitLab Pages (publication des artefacts, ex. mises à jour electron-updater)
