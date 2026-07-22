@@ -31,7 +31,21 @@ RUNNER_TOKEN_FILE=docker/gitlab/runner_token.txt
 # d'essayer de mettre à jour l'ancienne (interdit par Swarm)
 GITLAB_CONFIG_HASH := $(shell md5sum docker/gitlab/gitlab.rb | cut -c1-8)
 
-.PHONY: all init_volumes create_secrets deploy reinit status
+.PHONY: all init_volumes create_secrets deploy reinit status help
+
+help:
+	@echo "GitLab CE — commandes Make disponibles"
+	@echo ""
+	@echo "  make help           Affiche cette aide"
+	@echo "  make all            Installation complète (init_volumes + create_secrets + deploy)"
+	@echo "  make init_volumes   Crée les répertoires persistants sous GITLAB_HOME"
+	@echo "  make create_secrets Crée les secrets Docker (idempotent, ne modifie pas les existants)"
+	@echo "  make deploy         Déploie ou met à jour la stack Swarm"
+	@echo "  make status         Affiche l'état des services Swarm"
+	@echo "  make reinit         Supprime la stack et relance make all (ATTENTION : données conservées)"
+	@echo ""
+	@echo "Prérequis : fichier .env (copier depuis .env.example) et Swarm initialisé (docker swarm init)"
+	@echo "Fichiers locaux requis pour create_secrets : docker/gitlab/smtp_password.txt, docker/gitlab/runner_token.txt"
 
 all:
 	@echo "GITLAB_HOME est défini sur $(GITLAB_HOME)"
