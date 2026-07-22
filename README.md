@@ -35,21 +35,35 @@ docker swarm init
 
 ```bash
 sudo rm -rf /data/gitlab/*
-sudo mkdir -p /data/gitlab/data /data/gitlab/logs /data/gitlab/config /data/gitlab/ssl
+sudo mkdir -p /data/gitlab/data /data/gitlab/logs /data/gitlab/config /data/gitlab/certs
 sudo chown -R 1000:1000 /data/gitlab
 ```
 
-> **Important** : le répertoire `/data/gitlab/ssl` doit contenir les certificats TLS utilisés par GitLab (si vous activez HTTPS). Placez les fichiers avec les noms exacts ci‑dessous :
+> **Important** : le répertoire `/data/gitlab/certs` doit contenir les certificats TLS utilisés par GitLab (si vous activez HTTPS). Placez les fichiers avec les noms exacts ci‑dessous :
 >
-> * `/data/gitlab/ssl/gitlab.securit.fr.crt`
-> * `/data/gitlab/ssl/gitlab.securit.fr.key`
+> * `/data/gitlab/certs/gitlab.securit.fr.crt`
+> * `/data/gitlab/certs/gitlab.securit.fr.key`
 >
-> Ces fichiers seront montés dans le container sur `/etc/gitlab/ssl/` (voir la configuration `gitlab.rb` : `nginx['/etc/gitlab/ssl/gitlab.securit.fr.crt']` et `nginx['/etc/gitlab/ssl/gitlab.securit.fr.key']`).
+> Ces chemins correspondent à la configuration `gitlab.rb` (`gitlab_rails['nginx']['ssl_certificate']` et `ssl_certificate_key`).
 
-2. Définir les variables d'environnement dans le fichier `.env` (voir `.env.example`) :
+2. Copier `.env.example` vers `.env` et adapter les valeurs :
+
+```bash
+cp .env.example .env
+```
+
+Exemple de contenu (voir `.env.example`) :
 
 ```bash
 GITLAB_HOME=/data/gitlab
+
+# URL complète pour Omnibus (external_url) — avec schéma http/https
+GITLAB_EXTERNAL_URL=http://gitlab.local
+# Hostname seul (sans schéma) pour Docker hostname, aliases réseau et runners
+GITLAB_HOSTNAME=gitlab.local
+
+# IP de la VM hôte : utilisée par les containers de job CI pour résoudre GITLAB_HOSTNAME
+GITLAB_HOST_IP=172.16.100.121
 
 # SMTP (valeurs non sensibles — le mot de passe est géré via Docker secret)
 SMTP_ADDRESS=mta.securit.fr
@@ -59,6 +73,10 @@ SMTP_DOMAIN=securit.fr
 ```
 
 > Le fichier `.env` n'est **pas versionné** (`.gitignore`). Le `Makefile` le charge automatiquement (`include .env` + `export`), et ces variables sont substituées dans `docker-compose.yml` puis lues par `gitlab.rb` via `ENV['...']`.
+>
+> **`GITLAB_EXTERNAL_URL`** : URL complète (ex. `http://gitlab.local` ou `https://gitlab.securit.fr`) — utilisée pour `external_url` et l'enregistrement des runners.
+>
+> **`GITLAB_HOSTNAME`** : nom d'hôte seul, **sans** `http://` (ex. `gitlab.local`) — utilisé pour le hostname Docker, les aliases réseau Swarm et la résolution DNS dans les jobs CI.
 >
 > Si vous déployez sans le Makefile, exportez d'abord les variables dans le shell (y compris le hash de la config, cf. plus bas) :
 >
@@ -101,17 +119,23 @@ docker secret rm gitlab_runner_token 2>/dev/null
 docker secret create gitlab_runner_token ./docker/gitlab/runner_token.txt
 ```
 
-> **Runners CI** : les replicas `gitlab-runner` s'enregistrent automatiquement au démarrage avec ce token (executor `docker`). La variable `GITLAB_HOST_IP` du `.env` doit contenir l'IP de la VM pour que les containers de job résolvent `gitlab.local`.
+> **Runners CI** : les replicas `gitlab-runner` (4 par défaut) s'enregistrent automatiquement au démarrage avec ce token (executor `docker`). La variable `GITLAB_HOST_IP` du `.env` doit contenir l'IP de la VM pour que les containers de job résolvent `GITLAB_HOSTNAME`. La configuration du runner est persistée dans le volume Swarm `gitlab_runner_config`.
 
 > Le secret `gitlab_root_password` sera injecté dans GitLab au démarrage pour définir le mot de passe initial du compte `root`. Le secret `gitlab_smtp_password` est lu par `gitlab.rb` depuis `/run/secrets/gitlab_smtp_password`.
 >
-> Alternativement, `make create_secrets` crée les deux secrets automatiquement (le mot de passe SMTP doit exister dans `docker/gitlab/smtp_password.txt`). Cette cible est **idempotente** : les secrets déjà existants sont conservés, ce qui permet de l'exécuter sans risque sur une instance en production.
+> Alternativement, `make create_secrets` crée les trois secrets automatiquement (fichiers requis : `smtp_password.txt` et `runner_token.txt` dans `docker/gitlab/`). Cette cible est **idempotente** : les secrets déjà existants sont conservés, ce qui permet de l'exécuter sans risque sur une instance en production.
 
 ---
 
 ## Étape 4 : Déployer la stack GitLab
 
-Avec les volumes et le secret prêts, déployer la stack :
+Avec les volumes et les secrets prêts :
+
+```bash
+make deploy
+```
+
+Ou manuellement (après avoir exporté le `.env`, cf. ci-dessus) :
 
 ```bash
 docker stack deploy -c docker-compose.yml gitlab
@@ -119,10 +143,10 @@ docker stack deploy -c docker-compose.yml gitlab
 
 Cette commande :
 
-* Crée les services `gitlab` et `gitlab-runner`
+* Crée les services `gitlab` (GitLab CE 19.2.0) et `gitlab-runner` (4 replicas)
 * Monte les volumes persistants
-* Injecte le secret pour le mot de passe root
-* Applique la configuration définie dans `gitlab.rb` et `docker-compose.yml`
+* Injecte les secrets (root, SMTP, runner)
+* Applique la configuration définie dans `gitlab.rb` (config Swarm versionnée par hash)
 
 ---
 
@@ -165,6 +189,7 @@ docker stack rm gitlab
 docker config ls --format '{{.Name}}' | grep '^gitlab_conf_' | xargs -r docker config rm
 docker secret rm gitlab_root_password 2>/dev/null
 docker secret rm gitlab_smtp_password 2>/dev/null
+docker secret rm gitlab_runner_token 2>/dev/null
 ```
 
 3. Supprimer les containers résiduels (si nécessaire) :
@@ -174,19 +199,17 @@ docker rm -f $(docker ps -aq --filter "name=gitlab")
 ```
 
 4. Créer à nouveau les secrets et vérifier les volumes persistants.
-5. Déployer la stack avec :
-
-```bash
-docker stack deploy -c docker-compose.yml gitlab
-```
+5. Déployer la stack avec `make deploy` (ou `docker stack deploy -c docker-compose.yml gitlab`).
 
 ---
 
 ## Notes importantes
 
-* Les mots de passe root doivent **toujours être gérés via Docker secrets** pour des raisons de sécurité.
+* Les mots de passe et tokens doivent **toujours être gérés via Docker secrets** ou fichiers non versionnés (`.gitignore`).
 * Les volumes persistants doivent être créés avec les permissions correctes (`chown -R 1000:1000`) pour permettre au conteneur GitLab de fonctionner correctement.
-* Pour la production, configurez `external_url` dans `gitlab.rb` avec le FQDN réel et les certificats SSL internes.
+* L'`external_url` est configuré via **`GITLAB_EXTERNAL_URL`** dans le `.env` (pas de modification manuelle de `gitlab.rb` pour changer l'URL).
+* Pour les **artefacts CI volumineux** (ex. installateurs Electron), augmenter la limite dans l'admin : **Paramètres → CI/CD → Taille maximale des artefacts** (défaut 100 Mo).
+* **GitLab Pages** (optionnel) : décommenter `pages_external_url` et `gitlab_pages['namespace_in_path']` dans `docker/gitlab/gitlab.rb`, puis `make deploy`.
 
 ---
 
@@ -207,11 +230,11 @@ docker stack deploy -c docker-compose.yml gitlab
 |  - /data/gitlab/data     |   |              |
 |  - /data/gitlab/logs     |   |              |
 |  - /data/gitlab/config   |   |              |
-| Secret: gitlab_root_pass |   |              |
-+--------------------------+   +--------------+
+| Secret: root, SMTP, runner |   | Volume: config runner   |
++--------------------------+   +-------------------------+
 ```
 
-> Ce diagramme montre la relation entre les services, les volumes persistants et le secret root pour l’instance GitLab CE.
+> Ce diagramme montre la relation entre les services, les volumes persistants et les secrets pour l'instance GitLab CE.
 
 ---
 

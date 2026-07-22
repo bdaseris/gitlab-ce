@@ -40,7 +40,7 @@ all:
 ## Étape 1 : Préparer les répertoires persistants
 init_volumes:
 	@echo "Création des répertoires persistants pour GitLab..."
-	sudo mkdir -p $(GITLAB_HOME)/data $(GITLAB_HOME)/logs $(GITLAB_HOME)/config $(GITLAB_HOME)/ssl
+	sudo mkdir -p $(GITLAB_HOME)/data $(GITLAB_HOME)/logs $(GITLAB_HOME)/config $(GITLAB_HOME)/certs
 	sudo chown -R 1000:1000 $(GITLAB_HOME)
 	@echo "Répertoires créés et permissions définies."
 
