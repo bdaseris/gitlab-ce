@@ -1,8 +1,8 @@
 services:
   gitlab:
-    image: gitlab/gitlab-ce:19.2.0-ce.0
-    hostname: 'gitlab.local'
-    # hostname: 'gitlab.securit.fr'
+    image: gitlab/gitlab-ce:19.3.0-ce.0
+    # Hostname Docker = nom d'hôte seul (pas une URL)
+    hostname: ${GITLAB_HOSTNAME}
     ports:
       - "2222:22"
       - "80:80"
@@ -13,6 +13,8 @@ services:
       - ${GITLAB_HOME}/config:/etc/gitlab
     environment:
       GITLAB_OMNIBUS_CONFIG: "from_file('/omnibus_config.rb')"
+      # Lu par gitlab.rb via ENV['...']
+      GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL}
       SMTP_ADDRESS: ${SMTP_ADDRESS}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER_NAME: ${SMTP_USER_NAME}
@@ -25,9 +27,9 @@ services:
       - gitlab_smtp_password
     networks:
       gitlab-network:
-        # permet aux runners de joindre l'instance via son external_url
+        # permet aux runners de joindre l'instance via le hostname
         aliases:
-          - gitlab.local
+          - ${GITLAB_HOSTNAME}
     deploy:
       replicas: 1
       restart_policy:
@@ -51,26 +53,30 @@ services:
     # S'enregistre automatiquement au démarrage auprès de l'instance GitLab
     # avec le token du secret gitlab_runner_token (créé via l'UI admin).
     # Les jobs tournent avec l'executor docker (socket Docker de l'hôte) ;
-    # gitlab.local est résolu dans les containers de job via extra-hosts.
+    # GITLAB_HOSTNAME est résolu dans les containers de job via extra-hosts.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         if ! grep -q '\[\[runners\]\]' /etc/gitlab-runner/config.toml 2>/dev/null; then
           gitlab-runner register --non-interactive \
-            --url "http://gitlab.local" \
+            --url "${GITLAB_EXTERNAL_URL}" \
             --token "$$(cat /run/secrets/gitlab_runner_token)" \
             --executor docker \
             --docker-image alpine:latest \
-            --docker-extra-hosts "gitlab.local:${GITLAB_HOST_IP}"
+            --docker-extra-hosts "${GITLAB_HOSTNAME}:${GITLAB_HOST_IP}"
         fi
         exec /usr/bin/dumb-init /entrypoint run
+    environment:
+      GITLAB_EXTERNAL_URL: ${GITLAB_EXTERNAL_URL}
+      GITLAB_HOSTNAME: ${GITLAB_HOSTNAME}
+      GITLAB_HOST_IP: ${GITLAB_HOST_IP}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     secrets:
       - gitlab_runner_token
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 4
     networks:
       - gitlab-network
 
