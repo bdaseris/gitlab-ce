@@ -9,9 +9,15 @@ export
 # on les retire pour que la valeur exportée soit propre
 SMTP_USER_NAME := $(subst ",,$(SMTP_USER_NAME))
 
-# Vérifie que la variable GITLAB_HOME est définie
+# Vérifie que les variables essentielles sont définies
 ifeq ($(origin GITLAB_HOME),undefined)
 $(error La variable GITLAB_HOME n'est pas définie. Ajoutez-la au fichier .env, par exemple : GITLAB_HOME=/data/gitlab)
+endif
+ifeq ($(origin GITLAB_EXTERNAL_URL),undefined)
+$(error La variable GITLAB_EXTERNAL_URL n'est pas définie. Exemple : GITLAB_EXTERNAL_URL=http://gitlab.local)
+endif
+ifeq ($(origin GITLAB_HOSTNAME),undefined)
+$(error La variable GITLAB_HOSTNAME n'est pas définie. Exemple : GITLAB_HOSTNAME=gitlab.local (sans http://))
 endif
 
 # Variables
