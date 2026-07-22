@@ -1,6 +1,6 @@
 services:
   gitlab:
-    image: gitlab/gitlab-ce:19.3.0-ce.0
+    image: gitlab/gitlab-ce:19.2.0-ce.0
     # Hostname Docker = nom d'hôte seul (pas une URL)
     hostname: ${GITLAB_HOSTNAME}
     ports:
