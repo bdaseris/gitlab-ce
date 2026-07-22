@@ -77,7 +77,7 @@ services:
       - gitlab_runner_token
     deploy:
       mode: replicated
-      replicas: 4
+      replicas: 1
     networks:
       - gitlab-network
 
