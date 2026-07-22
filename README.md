@@ -213,28 +213,142 @@ docker rm -f $(docker ps -aq --filter "name=gitlab")
 
 ---
 
-## Diagramme de l'architecture Docker Swarm pour GitLab
+## Flux fonctionnel (Mermaid)
 
-```
-            +----------------------+
-            |      Docker Swarm    |
-            +----------------------+
-                       |
-        +--------------+--------------+
-        |                             |
-+--------------------------+   +--------------+
-|   gitlab                 |   | gitlab-runner|
-|--------------------------|   |--------------|
-| Ports: 80,443,2222       |   | Réplicas: 4  |
-| Volumes:                 |   |              |
-|  - /data/gitlab/data     |   |              |
-|  - /data/gitlab/logs     |   |              |
-|  - /data/gitlab/config   |   |              |
-| Secret: root, SMTP, runner |   | Volume: config runner   |
-+--------------------------+   +-------------------------+
+### 1. Déploiement initial
+
+```mermaid
+flowchart TD
+    A[Admin DevOps] --> B[Copier .env.example vers .env]
+    B --> C[Configurer GITLAB_HOME<br/>GITLAB_EXTERNAL_URL<br/>GITLAB_HOSTNAME<br/>GITLAB_HOST_IP<br/>SMTP_*]
+    C --> D[Créer fichiers locaux non versionnés]
+    D --> D1[docker/gitlab/smtp_password.txt]
+    D --> D2[docker/gitlab/runner_token.txt<br/>token glrt- depuis UI Admin]
+    D1 --> E[make create_secrets]
+    D2 --> E
+    E --> E1[Secret gitlab_root_password<br/>généré aléatoirement]
+    E --> E2[Secret gitlab_smtp_password]
+    E --> E3[Secret gitlab_runner_token]
+    E1 --> F[make deploy]
+    E2 --> F
+    E3 --> F
+    F --> G[Makefile charge .env et exporte les variables]
+    G --> H[docker stack deploy]
+    H --> I[Config Swarm gitlab_conf_HASH<br/>depuis docker/gitlab/gitlab.rb]
+    H --> J[Service gitlab x1]
+    H --> K[Service gitlab-runner x4]
+    K --> L{config.toml existe ?}
+    L -->|Non| M[gitlab-runner register<br/>URL = GITLAB_EXTERNAL_URL]
+    L -->|Oui| N[Reprendre config persistée]
+    M --> O[Runners en ligne dans Admin CI/CD]
+    N --> O
+    J --> P[GitLab CE accessible<br/>GITLAB_EXTERNAL_URL]
 ```
 
-> Ce diagramme montre la relation entre les services, les volumes persistants et les secrets pour l'instance GitLab CE.
+### 2. Architecture runtime
+
+```mermaid
+flowchart LR
+    subgraph Host["VM hôte (Docker Swarm)"]
+        subgraph Swarm["Stack gitlab"]
+            subgraph Net["Réseau overlay gitlab-network"]
+                GL[gitlab<br/>CE 19.2.0<br/>hostname: GITLAB_HOSTNAME]
+                R1[gitlab-runner<br/>replica 1]
+                R2[gitlab-runner<br/>replica 2]
+                R3[gitlab-runner<br/>replica 3]
+                R4[gitlab-runner<br/>replica 4]
+            end
+            subgraph VolHost["Volumes persistants hôte"]
+                VDATA["/data/gitlab/data"]
+                VLOGS["/data/gitlab/logs"]
+                VCONF["/data/gitlab/config"]
+                VCERTS["/data/gitlab/certs"]
+            end
+            subgraph VolSwarm["Volumes Swarm"]
+                VRUN["gitlab_runner_config<br/>/etc/gitlab-runner"]
+            end
+            subgraph Secrets["Docker secrets"]
+                S1[gitlab_root_password]
+                S2[gitlab_smtp_password]
+                S3[gitlab_runner_token]
+            end
+            subgraph Config["Docker config"]
+                C1["gitlab_conf_HASH<br/>→ /omnibus_config.rb"]
+            end
+        end
+        SOCK["/var/run/docker.sock"]
+        subgraph JobContainers["Containers de job CI<br/>hors overlay Swarm"]
+            JOB[Job container<br/>executor docker]
+        end
+    end
+
+    DEV[Utilisateur / navigateur] -->|80 443 2222| GL
+    GL --- VDATA
+    GL --- VLOGS
+    GL --- VCONF
+    C1 -.-> GL
+    S1 -.-> GL
+    S2 -.-> GL
+    GL -.->|alias réseau| R1
+    GL -.->|alias réseau| R2
+    GL -.->|alias réseau| R3
+    GL -.->|alias réseau| R4
+    S3 -.-> R1
+    S3 -.-> R2
+    S3 -.-> R3
+    S3 -.-> R4
+    VRUN --- R1
+    VRUN --- R2
+    VRUN --- R3
+    VRUN --- R4
+    R1 --- SOCK
+    R2 --- SOCK
+    R3 --- SOCK
+    R4 --- SOCK
+    SOCK --> JOB
+    JOB -.->|extra-hosts<br/>GITLAB_HOSTNAME:GITLAB_HOST_IP| GL
+    SMTP[Serveur SMTP] -.->|port 587| GL
+```
+
+### 3. Exécution d'un job CI/CD
+
+```mermaid
+sequenceDiagram
+    actor Dev as Développeur
+    participant GL as GitLab CE
+    participant Runner as gitlab-runner
+    participant Job as Container de job
+    participant API as API GitLab<br/>GITLAB_EXTERNAL_URL
+
+    Dev->>GL: Push / tag / pipeline déclenché
+    GL->>GL: Planifie les jobs du .gitlab-ci.yml
+    GL->>Runner: Assigne un job (via réseau overlay)
+    Runner->>Job: docker run (socket hôte)<br/>extra-hosts GITLAB_HOSTNAME → GITLAB_HOST_IP
+  Job->>API: git clone / fetch du dépôt
+    Job->>Job: Exécute script (build, test…)
+    Job->>API: Upload artefacts (POST /api/v4/jobs/…/artifacts)
+    Job-->>Runner: Exit code
+    Runner-->>GL: Rapport de fin de job
+    GL-->>Dev: Pipeline vert / rouge dans l'UI
+```
+
+### 4. Configuration injectée
+
+```mermaid
+flowchart TB
+    ENV[".env<br/>GITLAB_EXTERNAL_URL<br/>GITLAB_HOSTNAME<br/>GITLAB_HOST_IP<br/>SMTP_*"] --> MAKE[Makefile<br/>include + export]
+    MAKE --> COMPOSE[docker-compose.yml]
+    COMPOSE --> GLENV[Variables env container gitlab]
+    COMPOSE --> RENV[Variables env container runner]
+    RB["docker/gitlab/gitlab.rb"] --> HASH[Hash MD5 → gitlab_conf_HASH]
+    HASH --> SWCFG[Config Swarm immuable]
+    SWCFG --> OMNIBUS["/omnibus_config.rb<br/>dans le container"]
+    GLENV --> OMNIBUS
+    OMNIBUS --> RUBY["gitlab.rb Ruby<br/>external_url ENV fetch<br/>SMTP ENV + secrets"]
+    RUBY --> OMN["gitlab-ctl reconfigure<br/>Nginx, Rails, Sidekiq…"]
+```
+
+> Les diagrammes ci-dessus décrivent le flux de déploiement, l'architecture Swarm, l'exécution CI/CD et l'injection de configuration pour l'instance GitLab CE Seris.
 
 ---
 
