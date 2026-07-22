@@ -6,12 +6,11 @@ external_url ENV.fetch('GITLAB_EXTERNAL_URL')
 # SSH settings
 gitlab_rails['gitlab_shell_ssh_port'] = 2222
 
-# Nginx settings (syntaxe GitLab 19.x : nginx['...'] est déprécié)
+# Nginx settings
 gitlab_rails['nginx'] = {
   'redirect_http_to_https' => true,
-  'ssl_certificate' => "/etc/gitlab/ssl/gitlab.securit.fr.crt",
-  'ssl_certificate_key' => "/etc/gitlab/ssl/gitlab.securit.fr.key",
-  # Uploads volumineux (artefacts CI type installateur Electron ~100-200 Mo)
+  'ssl_certificate' => "/data/gitlab/certs/gitlab.securit.fr.crt",
+  'ssl_certificate_key' => "/data/gitlab/certs/gitlab.securit.fr.key",
   'client_max_body_size' => '1g'
 }
 
